@@ -1,111 +1,12 @@
-#include <math.h>
+#include "vertex.h"
 #include <ncurses.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#define PI (3.1415926535)
-
-struct vec3 {
-  double x, y, z;
-};
-
-struct vertex {
-  struct vec3 pos;
-  struct vec3 norm;
-  char c;
-};
-
-// Return the norm of a vector
-double xznorm(struct vec3 *v) { return sqrt(pow(v->x, 2) + pow(v->z, 2)); }
-
-// Pretty print the point
-void draw_vertex(struct vertex *v, int scale, int xoffset, int yoffset) {
-  if (v->c == '\0') {
-    return;
-  }
-
-  // Set some colors
-  const int BLACK = 232;
-  const int NCOLORS = 16;
-  for (int i = 1; i <= NCOLORS; ++i) {
-    init_pair(i, BLACK + i + 2, COLOR_BLACK);
-  }
-
-  // Pick a color based on v->z
-  float normalized;
-  int n;
-  if (1) {
-    // Lighting from side
-    normalized = v->norm.x - v->norm.z;       // Sum of vectors
-    normalized /= sqrt(2) * xznorm(&v->norm); // Normalize
-    normalized = (normalized + 1) / 2.0;      // Adjust to the range [0,1]
-    n = normalized * NCOLORS;
-  } else {
-    // Depth based
-    normalized = (v->pos.z / xznorm(&v->pos) + 1) / 2.0;
-    n = normalized * NCOLORS + 1;
-  }
-
-  // Draw character in that color
-  attron(COLOR_PAIR(n));
-  mvaddch((v->pos.y * scale + yoffset), v->pos.x * scale + xoffset, v->c);
-  attroff(COLOR_PAIR(n));
-}
-
-// Rotate a vec3 by theta degrees
-void rotate(struct vec3 *v, double theta) {
-  struct vec3 tmp = *v;
-  tmp.x = v->x * cos(theta) - v->z * sin(theta);
-  tmp.z = v->x * sin(theta) + v->z * cos(theta);
-  *v = tmp;
-}
-
-int cmp_vec(const void *a, const void *b) {
-  const struct vec3 *v1 = a;
-  const struct vec3 *v2 = b;
-  return v1->z > v2->z;
-}
-
-// Center the vertices
-void center(struct vertex *vertices, int length, int cols, int rows) {
-  for (int i = 0; i < length; ++i) {
-    struct vertex *v = &vertices[i];
-    v->pos.x -= (cols - 1) / 2.0;
-    v->pos.y -= (rows - 1) / 2.0;
-  }
-}
-
-// Set up ncurses
-void setup() {
-  initscr();
-  nodelay(stdscr, 1);
-  cbreak();
-  start_color();
-  noecho();
-  curs_set(0);
-}
-
-// Draw the image
-void draw(struct vertex *vertices, int length) {
-  int maxy, maxx; // Place in the middle
-  getmaxyx(stdscr, maxy, maxx);
-
-  // Draw points
-  for (int i = 0; i < length; ++i) {
-    struct vertex *v = &vertices[i];
-    draw_vertex(v, 1, maxx / 2.0, maxy / 2.0);
-
-    // Rotate point
-    rotate(&v->pos, PI / 128);
-    rotate(&v->norm, PI / 128);
-  }
-  refresh(); // Actually draw
-}
-
 // Return the length of the longest row
-int count_columns(char *str, int len) {
+int row_count(char *str, int len) {
   int cols = 0, x = 0;
   for (int i = 0; i < len; ++i) {
     if (str[i] == '\n') {
@@ -121,7 +22,7 @@ int count_columns(char *str, int len) {
 }
 
 // Return the number of rows
-int count_rows(char *str, int len) {
+int column_count(char *str, int len) {
   int rows = 0;
   for (int i = 0; i < len; ++i) {
     if (str[i] == '\n') {
@@ -139,23 +40,14 @@ int filesize(FILE *fp) {
   return size;
 }
 
-// Read vertices from a string
-void read_vertices(struct vertex *vertices, char *contents, int fsize) {
-  int idx = 0, x = 0, y = 0;
-  for (int i = 0; i < fsize; ++i) {
-    char c = contents[i];
-    char symbol = c == '\n' || c == ' ' ? '\0' : c;
-
-    vertices[idx++] = (struct vertex){{x, y, 0}, {0, 0, 1}, symbol};
-    vertices[idx++] = (struct vertex){{x, y, 0.1}, {0, 0, -1}, symbol};
-
-    if (c == '\n') {
-      x = 0;
-      ++y;
-    } else {
-      ++x;
-    }
-  }
+// Set up ncurses
+void setup() {
+  initscr();
+  nodelay(stdscr, 1);
+  cbreak();
+  start_color();
+  noecho();
+  curs_set(0);
 }
 
 int main(int argc, char *argv[]) {
@@ -167,9 +59,12 @@ int main(int argc, char *argv[]) {
   }
 
   // Open the input file
-  FILE *fp = fopen(argv[1], "r");
+  const char *filename = argv[1];
+  FILE *fp = fopen(filename, "r");
   if (!fp) {
-    perror(argv[0]);
+    char buf[256];
+    snprintf(buf, 256, "%s: cannot access '%s'", argv[0], filename);
+    perror(buf);
     exit(1);
   }
 
@@ -190,9 +85,11 @@ int main(int argc, char *argv[]) {
   read_vertices(vertices, contents, fsize);
 
   // Center the vertices
-  int cols = count_columns(contents, fsize);
-  int rows = count_rows(contents, fsize);
-  center(vertices, nvertices, cols, rows);
+  int cols = row_count(contents, fsize);
+  int rows = column_count(contents, fsize);
+  for (int i = 0; i < nvertices; ++i) {
+    vec3_center(&vertices[i].pos, cols, rows);
+  }
   free(contents);
 
   setup(); // Start ncurses
@@ -201,9 +98,9 @@ int main(int argc, char *argv[]) {
     erase(); // Clear screen
 
     // Sort data based on depth
-    qsort(vertices, nvertices, sizeof(struct vertex), cmp_vec);
+    qsort(vertices, nvertices, sizeof(struct vertex), vec3_cmp);
 
-    draw(vertices, nvertices);
+    draw_vertices(vertices, nvertices);
 
     // Graceful exit
     if (getch() == 'q') {
