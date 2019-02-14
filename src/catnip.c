@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
 
   // One argument required
   if (argc <= 1) {
-    printf("Usage: %s <file>", argv[0]);
+    printf("Usage: %s <file>\n", argv[0]);
     exit(1);
   }
 
