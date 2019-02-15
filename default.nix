@@ -1,8 +1,13 @@
 with import <nixpkgs> {};
 
-stdenv.mkDerivation {
-  name = "catnip";
-  src = ./.;
+stdenv.mkDerivation rec {
+  version = "0.1";
+  name = "catnip-${version}";
+  src = lib.sourceByRegex ./. [
+    "(src|test|include)"
+    "CMakeLists.txt"
+    "(.*\.c|.*\.h)"
+  ];
   buildInputs = [
     gcc
     gnumake
