@@ -3,10 +3,8 @@ with import <nixpkgs> {};
 stdenv.mkDerivation rec {
   version = "0.1";
   name = "catnip-${version}";
-  src = lib.sourceByRegex ./. [
-    "(src|test|include)"
-    "CMakeLists.txt"
-    "(.*\.c|.*\.h)"
+  src = lib.sourceFilesBySuffices ./. [
+    "CMakeLists.txt" ".c" ".h"
   ];
   buildInputs = [
     gcc
@@ -16,6 +14,6 @@ stdenv.mkDerivation rec {
   ];
   installPhase = ''
     mkdir -p $out/bin/
-    cp catnip $out/bin/
+    cp src/catnip $out/bin/
   '';
 }
