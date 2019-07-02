@@ -6,3 +6,4 @@ target_include_directories(Vertex PUBLIC ${PROJECT_SOURCE_DIR}/include)
 
 add_executable(catnip catnip.c)
 target_link_libraries(catnip Vertex)
+install(TARGETS catnip DESTINATION bin)
